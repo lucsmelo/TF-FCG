@@ -24,7 +24,7 @@
 	<inttypes.h>
 	<stdint.h>
 
-1650241681 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\main.cpp
+1651630394 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\main.cpp
 	<cmath>
 	<cstdio>
 	<cstdlib>
@@ -37,6 +37,10 @@
 	<sstream>
 	<stdexcept>
 	<algorithm>
+	<random>
+	<ctime>
+	<iostream>
+	<chrono>
 	<glad/glad.h>
 	<GLFW/glfw3.h>
 	<glm/mat4x4.hpp>

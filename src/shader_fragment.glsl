@@ -9,6 +9,7 @@ in vec4 normal;
 
 // Posição do vértice atual no sistema de coordenadas local do modelo.
 in vec4 position_model;
+in vec3 color_gou;
 
 // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
 in vec2 texcoords;
@@ -22,6 +23,11 @@ uniform mat4 projection;
 #define SPHERE 0
 #define BUNNY  1
 #define PLANE  2
+#define ORANGE 3
+#define BITCOIN 4
+#define LENGTH 5
+#define SKULL 5
+#define BANANA 6
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -42,8 +48,6 @@ out vec4 color;
 
 void main()
 {
-    // Obtemos a posição da câmera utilizando a inversa da matriz que define o
-    // sistema de coordenadas da câmera.
     vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
     vec4 camera_position = inverse(view) * origin;
 
@@ -59,10 +63,26 @@ void main()
     vec4 n = normalize(normal);
 
     // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
-    vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
+    vec4 l = normalize(camera_position-p);
 
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
+
+    // Vetor que define o sentido da reflexão especular ideal.
+    vec4 r = -l + 2*n*dot(n,l);
+
+    // Parâmetros que definem as propriedades espectrais da superfície
+    vec3 Kd; // Refletância difusa
+    vec3 Ks; // Refletância especular
+    vec3 Ka; // Refletância ambiente
+    float q; // Expoente especular para o modelo de iluminação de Phong
+
+        // Espectro da fonte de iluminação
+    vec3 I = vec3(1.0,1.0,1.0); // o espectro da fonte de luz
+
+    // Espectro da luz ambiente
+    vec3 Ia = vec3(0.2, 0.2, 0.2); // o espectro da luz ambiente
+
 
     // Coordenadas de textura U e V
     float U = 0.0;
@@ -70,45 +90,26 @@ void main()
 
     if ( object_id == SPHERE )
     {
-        // PREENCHA AQUI as coordenadas de textura da esfera, computadas com
-        // projeção esférica EM COORDENADAS DO MODELO. Utilize como referência
-        // o slides 134-150 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // A esfera que define a projeção deve estar centrada na posição
-        // "bbox_center" definida abaixo.
+        // Propriedades espectrais da esfera
+        Kd = vec3(0.8, 0.4, 0.08);
+        Ks = vec3(0.0,0.0,0.0);
+        Ka = vec3(0.4, 0.2, 0.04);
+        q = 1.0;
+                // Termo difuso utilizando a lei dos cossenos de Lambert
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
-        // Você deve utilizar:
-        //   função 'length( )' : comprimento Euclidiano de um vetor
-        //   função 'atan( , )' : arcotangente. Veja https://en.wikipedia.org/wiki/Atan2.
-        //   função 'asin( )'   : seno inverso.
-        //   constante M_PI
-        //   variável position_model
+    // Termo ambiente
+    vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec4 h= normalize(v+l);//slide 150 aula 17-18
+    vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Phong
 
-        float rho=1.0f;
-
-        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
-
-        vec4 p_linha= bbox_center+rho*((position_model-bbox_center)/length((position_model-bbox_center)));
-        vec4 p_vetor= p_linha-bbox_center;
-
-        float theta = atan(p_vetor.x,p_vetor.z);
-        float phi= asin(p_vetor.y/rho);
-
-
-        U = (theta+M_PI)/(2*M_PI);
-        V = (phi+M_PI_2)/M_PI;
+    color.rgb = lambert_diffuse_term + ambient_term + blinn_phong_specular_term;
     }
     else if ( object_id == BUNNY )
     {
-        // PREENCHA AQUI as coordenadas de textura do coelho, computadas com
-        // projeção planar XY em COORDENADAS DO MODELO. Utilize como referência
-        // o slides 99-104 do documento Aula_20_Mapeamento_de_Texturas.pdf,
-        // e também use as variáveis min*/max* definidas abaixo para normalizar
-        // as coordenadas de textura U e V dentro do intervalo [0,1]. Para
-        // tanto, veja por exemplo o mapeamento da variável 'p_v' utilizando
-        // 'h' no slides 158-160 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // Veja também a Questão 4 do Questionário 4 no Moodle.
-
+        // Propriedades espectrais do coelho]
         float minx = bbox_min.x;
         float maxx = bbox_max.x;
 
@@ -120,22 +121,148 @@ void main()
 
         U = (position_model.x-minx)/(maxx - minx);
         V = (position_model.y-miny)/(maxy - miny);
+
+        Kd = texture(TextureImage0, vec2(U,V)).rgb;
+        Ks = vec3(0.0, 0.0, 0);
+
+
+        q = 32.0;
+                // Termo difuso utilizando a lei dos cossenos de Lambert
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+    // Termo ambiente
+    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+
+    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
     }
     else if ( object_id == PLANE )
     {
-        // Coordenadas de textura do plano, obtidas do arquivo OBJ.
-        U = texcoords.x;
-        V = texcoords.y;
+        // Propriedades espectrais do plano
+        Kd = vec3(0.2, 0.2, 0.2);
+        Ks = vec3(0.3, 0.3, 0.3);
+        Ka = vec3(0.0,0.0,0.0);
+        q = 20.0;
+                // Termo difuso utilizando a lei dos cossenos de Lambert
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+    // Termo ambiente
+    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+
+    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+    }
+        else if ( object_id == ORANGE )
+    {
+        float rho=1.0f;
+
+        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
+
+        vec4 p_linha= bbox_center+rho*((position_model-bbox_center)/length((position_model-bbox_center)));
+        vec4 p_vetor= p_linha-bbox_center;
+
+        float theta = atan(p_vetor.x,p_vetor.z);
+        float phi= asin(p_vetor.y/rho);
+
+
+
+        U = (theta+M_PI)/(2*M_PI);
+        V = (phi+M_PI_2)/M_PI;
+        // Propriedades espectrais do plano
+        Kd = texture(TextureImage1, vec2(U,V)).rgb;
+        Ks = vec3(0.0,0.0,0.0);
+        q = 1.0;
+                // Termo difuso utilizando a lei dos cossenos de Lambert
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+    // Termo ambiente
+    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+
+    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+    }
+            else if ( object_id == BITCOIN )
+    {
+        // Propriedades espectrais do plano
+        Kd = vec3(0.8, 0.4, 0.08);
+        Ks = vec3(0.0,0.0,0.0);
+        Ka = vec3(0.4, 0.2, 0.04);
+        q = 1.0;
+                // Termo difuso utilizando a lei dos cossenos de Lambert
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+    // Termo ambiente
+    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+
+    color.rgb = color_gou;
+    }
+        else if ( object_id == SKULL )
+    {
+        // Propriedades espectrais do plano
+        Kd = vec3(0.2, 0.2, 0.2);
+        Ks = vec3(0.3, 0.3, 0.3);
+        Ka = vec3(0.0,0.0,0.0);
+        q = 20.0;
+                // Termo difuso utilizando a lei dos cossenos de Lambert
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+    // Termo ambiente
+    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+
+    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+    }
+        else if ( object_id == BANANA )
+    {
+        float minx = bbox_min.x;
+        float maxx = bbox_max.x;
+
+        float miny = bbox_min.y;
+        float maxy = bbox_max.y;
+
+        float minz = bbox_min.z;
+        float maxz = bbox_max.z;
+
+        U = (position_model.x-minx)/(maxx - minx);
+        V = (position_model.y-miny)/(maxy - miny);
+
+        Kd = texture(TextureImage2, vec2(U,V)).rgb;
+        Ks = vec3(0.0, 0.0, 0);
+
+
+        q =1.0;
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+    // Termo ambiente
+    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+
+    color.rgb = lambert_diffuse_term + ambient_term;
+    }
+    else // Objeto desconhecido = preto
+    {
+        Kd = vec3(0.0,0.0,0.0);
+        Ks = vec3(0.0,0.0,0.0);
+        Ka = vec3(0.0,0.0,0.0);
+        q = 1.0;
     }
 
-    // Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-    vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
-    vec3 Kd1 = texture(TextureImage1, vec2(U,V)).rgb;
 
-    // Equação de Iluminação
-    float lambert = max(0,dot(n,l));
 
-    color.rgb = (Kd0 * (lambert + 0.01))+(Kd1* (1-pow(lambert,0.08) +0.01));
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
@@ -151,8 +278,11 @@ void main()
     // Alpha default = 1 = 100% opaco = 0% transparente
     color.a = 1;
 
+    // Cor final do fragmento calculada com uma combinação dos termos difuso,
+    // especular, e ambiente. Veja slide 129 do documento Aula_17_e_18_Modelos_de_Iluminacao.pdf.
+
+
     // Cor final com correção gamma, considerando monitor sRGB.
     // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas
     color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
 }
-
