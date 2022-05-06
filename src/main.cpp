@@ -80,7 +80,7 @@ struct ObjModel
 };
 
 
-
+int ok=1;
 
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
@@ -160,11 +160,14 @@ struct RewardObject{
     float posy;
     float posz;
     int points;
+    bool is_ok;
 };
 
 
 struct Player{
     int points;
+    bool is_first_try;
+
 };
 
 std::vector<RewardObject>Rewards;
@@ -232,6 +235,9 @@ GLint bbox_max_uniform;
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
+std::vector<int>selects;
+#define MAX 3
+int contador;
 bool w_was_press = false;
 bool s_was_press = false;
 bool d_was_press = false;
@@ -239,7 +245,7 @@ bool a_was_press = false;
 float start_x=0.0f;
 float start_y=0.0f;
 float start_z=3.0f;
-
+bool game_is_running=true;
 float pos_x[9]={-2,0.5,2.5,-2,0.5,2.5,-2,0.5,2.5};
 float pos_y[9]={0,0,0,-2,-2,-2,-4,-4,-4};
 
@@ -328,6 +334,10 @@ int main(int argc, char* argv[])
     ComputeNormals(&spheremodel);
     BuildTrianglesAndAddToVirtualScene(&spheremodel);
 
+    ObjModel handmodel("../../data/hand.obj");
+    ComputeNormals(&handmodel);
+    BuildTrianglesAndAddToVirtualScene(&handmodel);
+
     ObjModel bunnymodel("../../data/bunny.obj");
     ComputeNormals(&bunnymodel);
     BuildTrianglesAndAddToVirtualScene(&bunnymodel);
@@ -372,6 +382,8 @@ int main(int argc, char* argv[])
     for(int i=0; i<9; i++)
         std::cout << numbers[i] << std::endl;
 
+
+
   int number=0;
 
 
@@ -384,6 +396,7 @@ int main(int argc, char* argv[])
         Rewards[aux].posz=Boxes[number].posz;
         Rewards[aux].type="orange";
         Rewards[aux].points=100;
+        Rewards[aux].is_ok=true;
     }
     for (int aux=3; aux < 5; aux++){
         number=numbers[aux];
@@ -394,6 +407,7 @@ int main(int argc, char* argv[])
         Rewards[aux].posz=Boxes[number].posz;
         Rewards[aux].type="bunny";
         Rewards[aux].points=150;
+        Rewards[aux].is_ok=true;
     }
     for (int aux=5; aux < 6; aux++){
         number=numbers[aux];
@@ -404,6 +418,7 @@ int main(int argc, char* argv[])
         Rewards[aux].posz=Boxes[number].posz;
         Rewards[aux].type="bitcoin";
         Rewards[aux].points=500;
+        Rewards[aux].is_ok=true;
     }
     for (int aux=6; aux < 7; aux++){
         number=numbers[aux];
@@ -414,6 +429,7 @@ int main(int argc, char* argv[])
         Rewards[aux].posz=Boxes[number].posz;
         Rewards[aux].type="skull";
         Rewards[aux].points=0;
+        Rewards[aux].is_ok=true;
     }
         for (int aux=7; aux < 9; aux++){
         number=numbers[aux];
@@ -424,11 +440,17 @@ int main(int argc, char* argv[])
         Rewards[aux].posz=Boxes[number].posz;
         Rewards[aux].type="Banana";
         Rewards[aux].points=200;
+        Rewards[aux].is_ok=true;
     }
 
     player.points=0;
+    player.is_first_try=true;
+    std::vector<bool> oks;
+    for(int i=0; i<9; i++)
+       oks.push_back(true);
+    std::vector<float> posz_atuals;
 
-
+float previous_time=(float)glfwGetTime();
 
     if ( argc > 1 )
     {
@@ -456,6 +478,7 @@ int main(int argc, char* argv[])
     // Ficamos em loop, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
+        if(game_is_running){
         // Aqui executamos as operações de renderização
 
         // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
@@ -482,6 +505,14 @@ int main(int argc, char* argv[])
         float y = r*sin(g_CameraPhi);
         float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
         float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+
+        contador=0;
+
+       float current_time = (float)glfwGetTime();
+        float delta_time = current_time - previous_time;
+        previous_time = current_time;
+        std::cout<<delta_time<<std::endl;
+
         /*
         // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
         // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
@@ -582,6 +613,7 @@ int main(int argc, char* argv[])
         DrawVirtualObject("plane");
 
 
+
 /*
         // Desenhamos o modelo da esfera
 
@@ -606,15 +638,116 @@ int main(int argc, char* argv[])
             PopMatrix(model_box);
         PopMatrix(model_box);
 */
+           model = Matrix_Translate(camera_position_c.x+0.5,camera_position_c.y-0.4,camera_position_c.z-0.4)*Matrix_Rotate_Z(3.14/2)*Matrix_Rotate_X(3.14/2)*Matrix_Scale(0.03,0.03,0.03);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, SPHERE);
+            DrawVirtualObject("15797_Pointer_v1");
+
+        float posz_atual;
+
 
 
         for (int aux=0; aux < 9; aux++){
-           //model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
-           model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz-float(glfwGetTime())*0.1f)*Matrix_Scale(0.2,0.2,0.2);
+        if(Boxes[aux].is_selected==false)
+           model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+
+        else{
+
+
+                    if(oks[aux]){
+                        model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+                        Boxes[aux].posz=Boxes[aux].posz-delta_time;
+                        std::cout<<Boxes[aux].posz<<std::endl;
+                    }
+
+                    else{
+                        model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+                    }
+                    if(Boxes[aux].posz<-3)
+                        oks[aux]=false;
+
+
+
+
+
+                //posz_atual=Boxes[aux].posz-float(glfwGetTime())*0.1f
+            }
+
+
+
+           //model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz-float(glfwGetTime())*0.1f)*Matrix_Scale(0.2,0.2,0.2);
             glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
             glUniform1i(object_id_uniform, SPHERE);
             DrawVirtualObject("Crate_Plane.005");
         }
+
+
+/*
+
+        if(Boxes[0].is_selected==false)
+           model = Matrix_Translate(Boxes[0].posx, Boxes[0].posy,Boxes[0].posz)*Matrix_Scale(0.2,0.2,0.2);
+        else{
+
+
+                    if(oks[0]){
+                        model = Matrix_Translate(Boxes[0].posx, Boxes[0].posy,Boxes[0].posz)*Matrix_Scale(0.2,0.2,0.2);
+                        Boxes[0].posz=Boxes[0].posz-float(glfwGetTime())*0.001f;
+                        std::cout<<Boxes[0].posz<<std::endl;
+                    }
+
+                    else{
+                        model = Matrix_Translate(Boxes[0].posx, Boxes[0].posy,Boxes[0].posz)*Matrix_Scale(0.2,0.2,0.2);
+                    }
+                    if(Boxes[0].posz<-3)
+                        oks[0]=false;
+
+
+
+
+
+                //posz_atual=Boxes[aux].posz-float(glfwGetTime())*0.1f
+            }
+
+
+
+           //model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz-float(glfwGetTime())*0.1f)*Matrix_Scale(0.2,0.2,0.2);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, SPHERE);
+            DrawVirtualObject("Crate_Plane.005");
+
+                if(Boxes[1].is_selected==false)
+           model = Matrix_Translate(Boxes[1].posx, Boxes[1].posy,Boxes[1].posz)*Matrix_Scale(0.2,0.2,0.2);
+        else{
+
+
+
+                    if(oks[1]){
+                        model = Matrix_Translate(Boxes[1].posx, Boxes[1].posy,Boxes[1].posz)*Matrix_Scale(0.2,0.2,0.2);
+                        Boxes[1].posz=Boxes[1].posz-float(glfwGetTime())*0.001f;
+                        std::cout<<Boxes[1].posz<<std::endl;
+                    }
+
+                    else{
+                        model = Matrix_Translate(Boxes[1].posx, Boxes[1].posy,Boxes[1].posz)*Matrix_Scale(0.2,0.2,0.2);
+                    }
+                    if(Boxes[1].posz<-3)
+                        oks[1]=false;
+
+
+
+
+
+                //posz_atual=Boxes[aux].posz-float(glfwGetTime())*0.1f
+            }
+
+
+
+           //model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz-float(glfwGetTime())*0.1f)*Matrix_Scale(0.2,0.2,0.2);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, SPHERE);
+            DrawVirtualObject("Crate_Plane.005");
+*/
+
 
         for (int aux=0; aux < 3; aux++){
             model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5, Rewards[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
@@ -648,6 +781,7 @@ int main(int argc, char* argv[])
             glUniform1i(object_id_uniform, BANANA);
             DrawVirtualObject("banana_mesh_quad.001");
         }
+
 
 
 
@@ -685,6 +819,12 @@ int main(int argc, char* argv[])
         // pela biblioteca GLFW.
         glfwPollEvents();
     }
+    else{
+
+    }
+
+    }
+
 
     // Finalizamos o uso dos recursos do sistema operacional
     glfwTerminate();
@@ -1433,12 +1573,18 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     {
         g_UsePerspectiveProjection = false;
 
+
     }
 
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
         g_ShowInfoText = !g_ShowInfoText;
+            for(int aux=0;aux<selects.size();aux++)
+        {
+            std::cout<<selects[aux]<<std::endl;
+        }
+        ok=0;
     }
 
     // Se o usuário apertar a tecla R, recarregamos os shaders dos arquivos "shader_fragment.glsl" e "shader_vertex.glsl".
@@ -1447,6 +1593,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         LoadShadersFromFiles();
         fprintf(stdout,"Shaders recarregados!\n");
         fflush(stdout);
+        player.points-=400;
     }
     // Parte que controla o movimento wasd pelo usuário
     if (key == GLFW_KEY_W && action == GLFW_PRESS)
@@ -1457,6 +1604,284 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         w_was_press = false;
 
     }
+        if (key == GLFW_KEY_E&& action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int count_s=std::count(selections.begin(), selections.end(), true);
+       if(count_s==0){
+
+             std::vector<int> numbers;
+        for(int i=0; i<9; i++)
+            numbers.push_back(i);
+
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        std::shuffle(numbers.begin(), numbers.end(), std::default_random_engine(seed));
+        int number;
+        for(int i=0; i<9; i++)
+            std::cout << numbers[i] << std::endl;
+
+            for (int aux=0; aux < 9; aux++){
+            number=numbers[aux];
+            Rewards[aux].id=number;
+            Rewards[aux].posx=Boxes[number].posx;
+            Rewards[aux].posy=Boxes[number].posy;
+            Rewards[aux].posz=Boxes[number].posz;
+
+        }
+
+       }
+    }
+
+       if (key == GLFW_KEY_1 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[0].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==0)
+               {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+
+
+        }
+
+
+    }
+       if (key == GLFW_KEY_2 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[1].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==1)
+                {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+       if (key == GLFW_KEY_3 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[2].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==2)
+               {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+       if (key == GLFW_KEY_4 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[3].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==3)
+               {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+
+       if (key == GLFW_KEY_5 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[4].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==4)
+                {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+
+       if (key == GLFW_KEY_6 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[5].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==5)
+               {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+
+       if (key == GLFW_KEY_7 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[6].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==6)
+                {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+
+       if (key == GLFW_KEY_8 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[7].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==7)
+                {
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+
+       if (key == GLFW_KEY_9 && action == GLFW_PRESS)
+    {
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        int selected;
+        int count_s=std::count(selections.begin(), selections.end(), true);
+        if(count_s<MAX){
+            Boxes[8].is_selected=true;
+            for(int aux=0;aux<9;aux++)
+        {
+            if(Rewards[aux].id==8){
+                selected=aux;
+                selects.push_back(selected);
+            }
+        }
+            if(Rewards[selected].is_ok==true){
+                player.points+=Rewards[selected].points;
+                Rewards[selected].is_ok=false;
+            }
+
+        }
+    }
+
+
+
+
 
     if (key == GLFW_KEY_A && action == GLFW_PRESS)
     {
