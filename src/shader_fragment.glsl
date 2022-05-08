@@ -20,7 +20,7 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SPHERE 0
+#define BOX 0
 #define BUNNY  1
 #define PLANE  2
 #define ORANGE 3
@@ -28,8 +28,10 @@ uniform mat4 projection;
 #define LENGTH 5
 #define SKULL 5
 #define BANANA 6
+#define HAND 7
 uniform int object_id;
 
+uniform bool spotlight;
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
 uniform vec4 bbox_min;
 uniform vec4 bbox_max;
@@ -38,6 +40,7 @@ uniform vec4 bbox_max;
 uniform sampler2D TextureImage0;
 uniform sampler2D TextureImage1;
 uniform sampler2D TextureImage2;
+uniform sampler2D TextureImage3;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -63,7 +66,8 @@ void main()
     vec4 n = normalize(normal);
 
     // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
-    vec4 l = normalize(camera_position-p);
+    vec4 l = normalize(camera_position - p);
+
 
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
@@ -88,28 +92,30 @@ void main()
     float U = 0.0;
     float V = 0.0;
 
-    if ( object_id == SPHERE )
+    if ( object_id == BOX )
     {
-        // Propriedades espectrais da esfera
+        // Propriedades espectrais da caixa
         Kd = vec3(0.8, 0.4, 0.08);
         Ks = vec3(0.0,0.0,0.0);
         Ka = vec3(0.4, 0.2, 0.04);
         q = 1.0;
-                // Termo difuso utilizando a lei dos cossenos de Lambert
+
+    // Termo difuso utilizando a lei dos cossenos de Lambert
     vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
     // Termo ambiente
     vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-    // Termo especular utilizando o modelo de iluminação de Phong
+    // Termo especular utilizando o modelo de iluminação de Blinn-Phong
     vec4 h= normalize(v+l);//slide 150 aula 17-18
-    vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Phong
+    vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Blinn-Phong
+
 
     color.rgb = lambert_diffuse_term + ambient_term + blinn_phong_specular_term;
     }
     else if ( object_id == BUNNY )
     {
-        // Propriedades espectrais do coelho]
+
         float minx = bbox_min.x;
         float maxx = bbox_max.x;
 
@@ -123,20 +129,19 @@ void main()
         V = (position_model.y-miny)/(maxy - miny);
 
         Kd = texture(TextureImage0, vec2(U,V)).rgb;
-        Ks = vec3(0.0, 0.0, 0);
+        Ks = vec3(0.0,0.0,0.0);
 
 
         q = 32.0;
-                // Termo difuso utilizando a lei dos cossenos de Lambert
+
+    // Termo difuso utilizando a lei dos cossenos de Lambert
     vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
     // Termo ambiente
     vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
 
-    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+    color.rgb = lambert_diffuse_term + ambient_term;
     }
     else if ( object_id == PLANE )
     {
@@ -145,19 +150,23 @@ void main()
         Ks = vec3(0.3, 0.3, 0.3);
         Ka = vec3(0.0,0.0,0.0);
         q = 20.0;
-                // Termo difuso utilizando a lei dos cossenos de Lambert
-    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
-    // Termo ambiente
-    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+        // Termo ambiente
+        vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+        // Termo especular utilizando o modelo de iluminação de Phong
+        vec4 h= normalize(v+l);//slide 150 aula 17-18
+        vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Phong
+
+        color.rgb = lambert_diffuse_term + ambient_term;
     }
+
         else if ( object_id == ORANGE )
     {
+        //laraja utilizando sua textura e iluminação difusa
         float rho=1.0f;
 
         vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
@@ -172,59 +181,60 @@ void main()
 
         U = (theta+M_PI)/(2*M_PI);
         V = (phi+M_PI_2)/M_PI;
-        // Propriedades espectrais do plano
         Kd = texture(TextureImage1, vec2(U,V)).rgb;
         Ks = vec3(0.0,0.0,0.0);
-        q = 1.0;
-                // Termo difuso utilizando a lei dos cossenos de Lambert
-    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+        q = 32.0;
 
-    // Termo ambiente
-    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+        // Termo ambiente
+        vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+
+        color.rgb = lambert_diffuse_term;
     }
-            else if ( object_id == BITCOIN )
+
+    else if ( object_id == BITCOIN )
     {
-        // Propriedades espectrais do plano
-        Kd = vec3(0.8, 0.4, 0.08);
+        //bitcoin usando interpolação de gourard definido no shader vertex
+        color.rgb = color_gou;
+    }
+
+    else if ( object_id == SKULL )
+    {
+        // caveira sendo utilizado sua textura e iluminação difusa
+        float minx = bbox_min.x;
+        float maxx = bbox_max.x;
+
+        float miny = bbox_min.y;
+        float maxy = bbox_max.y;
+
+        float minz = bbox_min.z;
+        float maxz = bbox_max.z;
+
+        U = (position_model.x-minx)/(maxx - minx);
+        V = (position_model.y-miny)/(maxy - miny);
+
+        Kd = texture(TextureImage3, vec2(U,V)).rgb;
         Ks = vec3(0.0,0.0,0.0);
-        Ka = vec3(0.4, 0.2, 0.04);
-        q = 1.0;
-                // Termo difuso utilizando a lei dos cossenos de Lambert
-    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
-    // Termo ambiente
-    vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+        q =1.0;
 
-    color.rgb = color_gou;
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+        // Termo ambiente
+        vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+
+        color.rgb = lambert_diffuse_term;
     }
-        else if ( object_id == SKULL )
+
+    else if ( object_id == BANANA )
     {
-        // Propriedades espectrais do plano
-        Kd = vec3(0.2, 0.2, 0.2);
-        Ks = vec3(0.3, 0.3, 0.3);
-        Ka = vec3(0.0,0.0,0.0);
-        q = 20.0;
-                // Termo difuso utilizando a lei dos cossenos de Lambert
-    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
-
-    // Termo ambiente
-    vec3 ambient_term =  Ka*Ia;// o termo ambiente
-
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
-
-    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
-    }
-        else if ( object_id == BANANA )
-    {
+        // banana sendo utilizado sua textura e iluminação difusa ambiente
         float minx = bbox_min.x;
         float maxx = bbox_max.x;
 
@@ -238,21 +248,41 @@ void main()
         V = (position_model.y-miny)/(maxy - miny);
 
         Kd = texture(TextureImage2, vec2(U,V)).rgb;
-        Ks = vec3(0.0, 0.0, 0);
+        Ks = vec3(0.0,0.0,0.0);
 
 
         q =1.0;
         // Termo difuso utilizando a lei dos cossenos de Lambert
-    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+        vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
-    // Termo ambiente
-    vec3 ambient_term =  Ka*Ia;// o termo ambiente
+        // Termo ambiente
+        vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
-
-    color.rgb = lambert_diffuse_term + ambient_term;
+        color.rgb = lambert_diffuse_term + ambient_term;
     }
+
+    else if ( object_id == HAND )
+    {
+        // Propriedades espectrais da mão
+        Kd = vec3(0.8, 0.4, 0.08);
+        Ks = vec3(0.2,0.2,0.2);
+        Ka = vec3(0.4, 0.2, 0.04);
+        q = 1.0;
+
+
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+
+        // Termo ambiente
+        vec3 ambient_term =  Ka*Ia;// o termo ambiente
+
+        // Termo especular utilizando o modelo de iluminação de Blinn-Phong
+        vec4 h= normalize(v+l);//slide 150 aula 17-18
+        vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Blinn-Phong
+
+        color.rgb = lambert_diffuse_term + ambient_term + blinn_phong_specular_term;
+    }
+
     else // Objeto desconhecido = preto
     {
         Kd = vec3(0.0,0.0,0.0);

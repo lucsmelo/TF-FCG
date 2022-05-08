@@ -92,10 +92,11 @@ void main()
     // Espectro da luz ambiente
     vec3 Ia = vec3(0.2, 0.2, 0.2); // o espectro da luz ambiente
 
-    Kd = vec3(0.8, 0.4, 0.08);
+    //propriedade espectral do bitcoin
+    Kd = vec3(0.9, 0.5, 0.09);
     Ks = vec3(0.0,0.0,0.0);
     Ka = vec3(0.4, 0.2, 0.04);
-    q = 1.0;
+    q = 32.0;
     vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
     // Termo ambiente
@@ -103,6 +104,7 @@ void main()
 
     // Termo especular utilizando o modelo de iluminação de Phong
     vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+
     color_gou= lambert_diffuse_term + ambient_term + phong_specular_term;
 
 }

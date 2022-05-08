@@ -80,8 +80,6 @@ struct ObjModel
 };
 
 
-int ok=1;
-
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
 void PopMatrix(glm::mat4& M);
@@ -128,6 +126,9 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
+//função que calcula a posição dada pela curva de bezier
+glm::vec4 bezier_position(glm::vec4 p1,glm::vec4 p2,glm::vec4 p3,glm::vec4 p4,float t );
+
 // Definimos uma estrutura que armazenará dados necessários para renderizar
 // cada objeto da cena virtual.
 struct SceneObject
@@ -141,37 +142,40 @@ struct SceneObject
     glm::vec3    bbox_max;
 };
 
+// Estrutura que contém as informações da caixa
 struct Box{
 
-    int id;
-    float posx;
-    float posy;
-    float posz;
-    bool is_selected;
+    int id; //id da caixa(identificador de posição)
+    float posx; // posição x no plano
+    float posy;// posição y no plano
+    float posz;// posição z no plano
+    bool is_selected; // bool para verificar se ela foi selecionada
 
 };
 
+//vetor que armazena as caixas
 std::vector<Box>Boxes;
 
+// Estrutura que contém as informações das recompensas
 struct RewardObject{
-    std::string type;
-    int id;
-    float posx;
-    float posy;
-    float posz;
-    int points;
-    bool is_ok;
-};
-
-
-struct Player{
-    int points;
-    bool is_first_try;
+    std::string type; //tipo da recompensa
+    int id; //id da recompensa(posição)
+    float posx;// posição x no plano
+    float posy;// posição y no plano
+    float posz;// posição z no plano
+    int points;// pontos que valem a recompensa
+    bool is_ok; //variavel de controle para não recompensar mais de uma vez
 
 };
-
+//vetor que armazena as recompensas
 std::vector<RewardObject>Rewards;
 
+// Estrutura que contém as informações do player
+struct Player{
+    int points; //pontos totais
+};
+
+//player
 Player player;
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
@@ -231,26 +235,53 @@ GLint projection_uniform;
 GLint object_id_uniform;
 GLint bbox_min_uniform;
 GLint bbox_max_uniform;
+GLboolean spotlight_uniform;
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
+//vetor que controla quais recompensas foram selecionadas
 std::vector<int>selects;
-#define MAX 3
-int contador;
+
+// booleanos que controlam o movimento wasd do player
 bool w_was_press = false;
 bool s_was_press = false;
 bool d_was_press = false;
 bool a_was_press = false;
+
+// floats que controlam a posição inicial da camera
 float start_x=0.0f;
 float start_y=0.0f;
 float start_z=3.0f;
+
+//bool que controla se o jogador já escolheu as 3 caixas possiveis ou não
 bool game_is_running=true;
+
+// vetores que controlam as posições inicias das caixa
 float pos_x[9]={-2,0.5,2.5,-2,0.5,2.5,-2,0.5,2.5};
 float pos_y[9]={0,0,0,-2,-2,-2,-4,-4,-4};
 
+// camera_position da camera livre
 glm::vec4 camera_position_c=glm::vec4(start_x,start_y,start_z,1.0f);
 
+// vetor que controla se a caixa está na posição em que foi escolhida ou na original
+std::vector<bool> posz_atuals;
+
+// vetor que controla o movimento da caixa
+// se oks=true movimenta
+// se oks=false para
+std::vector<bool> oks;
+
+//valor que controla quando o jogo deve ir para tela de recompensas
+int correct_points=0;
+
+// variaveis que controlam o movimento de bezier
+float t=0; // variavel "t" no calculo de bezier
+bool should_go=true; // se está indo
+bool should_return=false; //se esta voltando
+
+//máximo de caixas possiveis a serem escolhidas
+#define MAX 3
 int main(int argc, char* argv[])
 {
     // Inicializamos a biblioteca GLFW, utilizada para criar uma janela do
@@ -327,12 +358,13 @@ int main(int argc, char* argv[])
     // Carregamos duas imagens para serem utilizadas como textura
     LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // TextureImage0
     LoadTextureImage("../../data/orange_surface.jpg"); // TextureImage1
-    LoadTextureImage("../../data/banana_surface.jpg"); // TextureImage1
+    LoadTextureImage("../../data/banana_surface.jpg"); // TextureImage2
+    LoadTextureImage("../../data/skull.jpg"); // TextureImage3
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel spheremodel("../../data/wood_box.obj");
-    ComputeNormals(&spheremodel);
-    BuildTrianglesAndAddToVirtualScene(&spheremodel);
+    ObjModel boxmodel("../../data/wood_box.obj");
+    ComputeNormals(&boxmodel);
+    BuildTrianglesAndAddToVirtualScene(&boxmodel);
 
     ObjModel handmodel("../../data/hand.obj");
     ComputeNormals(&handmodel);
@@ -362,6 +394,7 @@ int main(int argc, char* argv[])
     ComputeNormals(&bananamodel);
     BuildTrianglesAndAddToVirtualScene(&bananamodel);
 
+    // Cria as caixas com suas informações iniciais
     for (int aux=0; aux < 9; aux++){
         Boxes.push_back(Box());
         Boxes[aux].id=aux;
@@ -370,7 +403,14 @@ int main(int argc, char* argv[])
         Boxes[aux].posz=-2;
         Boxes[aux].is_selected=false;
     }
+    //cria as posições atuais como falsa porque nao foram escolhida ainda
+    for(int aux=0;aux<9;aux++)
+    {
+        posz_atuals.push_back(false);
+    }
 
+// lógica que seta números aleatórios de 0 a 8 para as recompensas (para recompensas não ficarem sempre na mesma posição)
+//esta lógica foi usada a partir de uma resposta do stackoverflow https://stackoverflow.com/questions/36922371/generate-different-random-numbers
     std::vector<int> numbers;
 
     for(int i=0; i<9; i++)
@@ -379,14 +419,11 @@ int main(int argc, char* argv[])
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::shuffle(numbers.begin(), numbers.end(), std::default_random_engine(seed));
 
-    for(int i=0; i<9; i++)
-        std::cout << numbers[i] << std::endl;
 
+//número auxiliar apenas
+    int number=0;
 
-
-  int number=0;
-
-
+// cria as recompensas do tipo laranja com suas devidas informações
     for (int aux=0; aux < 3; aux++){
         number=numbers[aux];
         Rewards.push_back(RewardObject());
@@ -394,10 +431,11 @@ int main(int argc, char* argv[])
         Rewards[aux].posx=Boxes[number].posx;
         Rewards[aux].posy=Boxes[number].posy;
         Rewards[aux].posz=Boxes[number].posz;
-        Rewards[aux].type="orange";
+        Rewards[aux].type="Orange";
         Rewards[aux].points=100;
         Rewards[aux].is_ok=true;
     }
+// cria as recompensas do tipo coelho com suas devidas informações
     for (int aux=3; aux < 5; aux++){
         number=numbers[aux];
         Rewards.push_back(RewardObject());
@@ -409,6 +447,7 @@ int main(int argc, char* argv[])
         Rewards[aux].points=150;
         Rewards[aux].is_ok=true;
     }
+// cria as recompensas do tipo bitcoin com suas devidas informações
     for (int aux=5; aux < 6; aux++){
         number=numbers[aux];
         Rewards.push_back(RewardObject());
@@ -416,10 +455,11 @@ int main(int argc, char* argv[])
         Rewards[aux].posx=Boxes[number].posx;
         Rewards[aux].posy=Boxes[number].posy;
         Rewards[aux].posz=Boxes[number].posz;
-        Rewards[aux].type="bitcoin";
+        Rewards[aux].type="16783_Zeus_v1_NEW.001";
         Rewards[aux].points=500;
         Rewards[aux].is_ok=true;
     }
+// cria as recompensas do tipo caveira com suas devidas informações
     for (int aux=6; aux < 7; aux++){
         number=numbers[aux];
         Rewards.push_back(RewardObject());
@@ -427,30 +467,32 @@ int main(int argc, char* argv[])
         Rewards[aux].posx=Boxes[number].posx;
         Rewards[aux].posy=Boxes[number].posy;
         Rewards[aux].posz=Boxes[number].posz;
-        Rewards[aux].type="skull";
+        Rewards[aux].type="Skull";
         Rewards[aux].points=0;
         Rewards[aux].is_ok=true;
     }
-        for (int aux=7; aux < 9; aux++){
+// cria as recompensas do tipo banana com suas devidas informações
+    for (int aux=7; aux < 9; aux++){
         number=numbers[aux];
         Rewards.push_back(RewardObject());
         Rewards[aux].id=number;
         Rewards[aux].posx=Boxes[number].posx;
         Rewards[aux].posy=Boxes[number].posy;
         Rewards[aux].posz=Boxes[number].posz;
-        Rewards[aux].type="Banana";
+        Rewards[aux].type="banana_mesh_quad.001";
         Rewards[aux].points=200;
         Rewards[aux].is_ok=true;
     }
 
+    //seta os pontos do player para 0 no início
     player.points=0;
-    player.is_first_try=true;
-    std::vector<bool> oks;
+
+// seta oks para true porque todos ainda não foram escolhidos
     for(int i=0; i<9; i++)
        oks.push_back(true);
-    std::vector<float> posz_atuals;
 
-float previous_time=(float)glfwGetTime();
+// variável que serve para calcular o delta_time do jogo
+    float prev_time=(float)glfwGetTime(); //tempo anterior
 
     if ( argc > 1 )
     {
@@ -475,10 +517,288 @@ float previous_time=(float)glfwGetTime();
     glm::mat4 the_model;
     glm::mat4 the_view;
 
+    glUniform1i(spotlight_uniform,false);
+
     // Ficamos em loop, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
-        if(game_is_running){
+        glUniform1i(spotlight_uniform,false);
+
+        // controla o número de caixas escolhidas
+        correct_points=std::count(posz_atuals.begin(), posz_atuals.end(), true);
+
+        if (correct_points==MAX){
+            game_is_running=false; //se o número de caixas for igual ao máximo, vai pra tela final
+        }
+        else{
+            game_is_running=true; // se não continua o jogo
+        }
+
+
+
+        if(game_is_running){ // se o número de caixas escolhidas for menor que o máximo
+
+            // Aqui executamos as operações de renderização
+
+            // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
+            // definida como coeficientes RGBA: Red, Green, Blue, Alpha; isto é:
+            // Vermelho, Verde, Azul, Alpha (valor de transparência).
+            // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
+            //
+            //           R     G     B     A
+            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+            // "Pintamos" todos os pixels do framebuffer com a cor definida acima,
+            // e também resetamos todos os pixels do Z-buffer (depth buffer).
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            // Pedimos para a GPU utilizar o programa de GPU criado acima (contendo
+            // os shaders de vértice e fragmentos).
+            glUseProgram(program_id);
+
+            // Computamos a posição da câmera utilizando coordenadas esféricas.  As
+            // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
+            // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
+            // e ScrollCallback().
+            float r = g_CameraDistance;
+            float y = r*sin(g_CameraPhi);
+            float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
+            float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+
+            // controlador de tempo clássico, onde usa o temmpo atual e antigo
+            float cur_time = (float)glfwGetTime();
+            float delta_time = cur_time - prev_time;
+            prev_time = cur_time;
+
+            /*
+            // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
+            // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
+            glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
+            glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
+            glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
+            glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+
+            // Computamos a matriz "View" utilizando os parâmetros da câmera para
+            // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
+            glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+            */
+             glm::vec4 free_camera_view_vector = glm::vec4(x,y,z,0.0f); // inicia free camera
+            glm::vec4 camera_up_vector= glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global) //still using that
+
+            glm::vec4 w=(-free_camera_view_vector)/norm(free_camera_view_vector);
+            glm::vec4 u=crossproduct(camera_up_vector,w)/norm(crossproduct(camera_up_vector,w));
+
+            //controla o movimento wasd da free camera
+            if(w_was_press)
+                camera_position_c += -w * 0.03f;
+            if(s_was_press)
+                camera_position_c += w *  0.03f;
+            if(d_was_press)
+                camera_position_c +=u *  0.03f;
+            if(a_was_press)
+                camera_position_c +=-u *  0.03f;
+
+            // Computamos a matriz "View" utilizando os parâmetros da câmera para
+            // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
+            glm::mat4 view = Matrix_Camera_View(camera_position_c, free_camera_view_vector, camera_up_vector);
+            // Agora computamos a matriz de Projeção.
+            glm::mat4 projection;
+
+            // Note que, no sistema de coordenadas da câmera, os planos near e far
+            // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
+            float nearplane = -0.1f;  // Posição do "near plane"
+            float farplane  = -10.0f; // Posição do "far plane"
+
+            if (g_UsePerspectiveProjection)
+            {
+                // Projeção Perspectiva.
+                // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
+                float field_of_view = 3.141592 / 2.0f;
+                projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
+            }
+            else
+            {
+                // Projeção Ortográfica.
+                // Para definição dos valores l, r, b, t ("left", "right", "bottom", "top"),
+                // PARA PROJEÇÃO ORTOGRÁFICA veja slides 219-224 do documento Aula_09_Projecoes.pdf.
+                // Para simular um "zoom" ortográfico, computamos o valor de "t"
+                // utilizando a variável g_CameraDistance.
+                float t = 1.5f*g_CameraDistance/2.5f;
+                float b = -t;
+                float r = t*g_ScreenRatio;
+                float l = -r;
+                projection = Matrix_Orthographic(l, r, b, t, nearplane, farplane);
+            }
+
+            glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
+
+            // Enviamos as matrizes "view" e "projection" para a placa de vídeo
+            // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
+            // efetivamente aplicadas em todos os pontos.
+            glUniformMatrix4fv(view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
+            glUniformMatrix4fv(projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
+
+            //defines dos ids dos objetos
+
+            #define BOX 0
+            #define BUNNY  1
+            #define PLANE  2
+            #define ORANGE 3
+            #define BITCOIN 4
+            #define SKULL 5
+            #define BANANA 6
+            #define HAND 7
+
+            //tamanho do plano
+            #define LENGTH 5
+
+
+             // Desenhamos o modelo do plano
+            model = Matrix_Translate(0.0f,-1.0f,-LENGTH)*Matrix_Rotate_X(3.14/2)*Matrix_Scale(LENGTH,1.0f,LENGTH);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, PLANE);
+            DrawVirtualObject("plane");
+            // Desenhamos o modelo do plano
+            model = Matrix_Translate(0.0f,-6,0.0f)*Matrix_Scale(LENGTH,1.0f,LENGTH);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, PLANE);
+            DrawVirtualObject("plane");
+            // Desenhamos o modelo do plano
+            model = Matrix_Translate(LENGTH,-1.0f,0.0f)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Z(3.14/2)*Matrix_Scale(LENGTH,1.0f,LENGTH);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, PLANE);
+            DrawVirtualObject("plane");
+
+            // Desenhamos o modelo do plano
+            model = Matrix_Translate(-LENGTH,-1.0f,0.0f)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Z(-3.14/2)*Matrix_Scale(LENGTH,1.0f,LENGTH);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, PLANE);
+            DrawVirtualObject("plane");
+
+
+
+
+
+            //desenhamos a mão
+            model = Matrix_Translate(camera_position_c.x+0.5,camera_position_c.y-0.4,camera_position_c.z-0.4)*Matrix_Rotate_Z(3.14/2)*Matrix_Rotate_X(3.14/2)*Matrix_Scale(0.03,0.03,0.03);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, HAND);
+            DrawVirtualObject("15797_Pointer_v1");
+
+
+            // desenhamos as caixas
+
+            for (int aux=0; aux < 9; aux++){
+            if(Boxes[aux].is_selected==false) // se a caixa não for selecionada começa na posição inicial
+               model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+
+            else{
+
+
+                        if(oks[aux]){ // se a caixa foi selecionada começa a animação
+                            model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+                            Boxes[aux].posz=Boxes[aux].posz-delta_time;
+
+                        }
+
+                        else{ // animação acabou, deixa a caixa na posição final
+                            model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+                        }
+
+                        if(Boxes[aux].posz<-4) //era pra testar a colisão com plano aqui e setar para parar de se mover
+                        {
+                            posz_atuals[aux]=true;
+                             oks[aux]=false;
+                        }
+                }
+
+
+
+
+                glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+                glUniform1i(object_id_uniform, BOX);
+                DrawVirtualObject("Crate_Plane.005");
+            }
+
+
+
+            // desenha as laranjas
+            for (int aux=0; aux < 3; aux++){
+                model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5, Rewards[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+                glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+                glUniform1i(object_id_uniform, ORANGE);
+                DrawVirtualObject("Orange");
+            }
+
+            // desenha os coelhos
+            for (int aux=3; aux < 5; aux++){
+                model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5, Rewards[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+                glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+                glUniform1i(object_id_uniform, BUNNY);
+                DrawVirtualObject("bunny");
+            }
+            // desenha o bitcoin
+            for (int aux=5; aux < 6; aux++){
+                model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5,Rewards[aux].posz)*Matrix_Scale(0.1,0.1,0.1);
+                glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+                glUniform1i(object_id_uniform, BITCOIN);
+                DrawVirtualObject("16783_Zeus_v1_NEW.001");
+            }
+            //desenha a caveira
+            for (int aux=6; aux < 7; aux++){
+                model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.3,Rewards[aux].posz)*Matrix_Scale(1.8,1.8,1.8);
+                glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+                glUniform1i(object_id_uniform, SKULL);
+                DrawVirtualObject("Skull");
+            }
+            //desenha a banana
+            for (int aux=7; aux < 9; aux++){
+                model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5,Rewards[aux].posz)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Y(3.14/2)*Matrix_Scale(0.35,0.35,0.35);
+                glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+                glUniform1i(object_id_uniform, BANANA);
+                DrawVirtualObject("banana_mesh_quad.001");
+            }
+
+
+
+
+            // Pegamos um vértice com coordenadas de modelo (0.5, 0.5, 0.5, 1) e o
+            // passamos por todos os sistemas de coordenadas armazenados nas
+            // matrizes the_model, the_view, e the_projection; e escrevemos na tela
+            // as matrizes e pontos resultantes dessas transformações.
+            //glm::vec4 p_model(0.5f, 0.5f, 0.5f, 1.0f);
+            //TextRendering_ShowModelViewProjection(window, projection, view, model, p_model);
+
+            // Imprimimos na tela os ângulos de Euler que controlam a rotação do
+            // terceiro cubo.
+            TextRendering_ShowEulerAngles(window);
+
+            // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
+            TextRendering_ShowProjection(window);
+
+            // Imprimimos na tela informação sobre o número de quadros renderizados
+            // por segundo (frames per second).
+            TextRendering_ShowFramesPerSecond(window);
+
+            TextRendering_ShowPoints(window);
+
+            // O framebuffer onde OpenGL executa as operações de renderização não
+            // é o mesmo que está sendo mostrado para o usuário, caso contrário
+            // seria possível ver artefatos conhecidos como "screen tearing". A
+            // chamada abaixo faz a troca dos buffers, mostrando para o usuário
+            // tudo que foi renderizado pelas funções acima.
+            // Veja o link: Veja o link: https://en.wikipedia.org/w/index.php?title=Multiple_buffering&oldid=793452829#Double_buffering_in_computer_graphics
+            glfwSwapBuffers(window);
+
+            // Verificamos com o sistema operacional se houve alguma interação do
+            // usuário (teclado, mouse, ...). Caso positivo, as funções de callback
+            // definidas anteriormente usando glfwSet*Callback() serão chamadas
+            // pela biblioteca GLFW.
+            glfwPollEvents();
+    }
+    else{// else referente a tela final( tela onde mostra-se as recompensas apenas)
+
+        glUniform1i(spotlight_uniform,true);
         // Aqui executamos as operações de renderização
 
         // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
@@ -501,22 +821,21 @@ float previous_time=(float)glfwGetTime();
         // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
         // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
         // e ScrollCallback().
+
         float r = g_CameraDistance;
         float y = r*sin(g_CameraPhi);
         float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
         float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
 
-        contador=0;
+        // controlador de tempo clássico, onde usa o temmpo atual e antigo
+        float cur_time = (float)glfwGetTime();
+        float delta_time = cur_time - prev_time;
+        prev_time = cur_time;
 
-       float current_time = (float)glfwGetTime();
-        float delta_time = current_time - previous_time;
-        previous_time = current_time;
-        std::cout<<delta_time<<std::endl;
 
-        /*
         // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
         // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
+        glm::vec4 camera_position_c  = glm::vec4(-x,-y,-z,1.0f); // Ponto "c", centro da câmera
         glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
         glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
         glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
@@ -524,27 +843,10 @@ float previous_time=(float)glfwGetTime();
         // Computamos a matriz "View" utilizando os parâmetros da câmera para
         // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
         glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
-        */
-         glm::vec4 free_camera_view_vector = glm::vec4(x,y,z,0.0f); // initialize free camera
-        glm::vec4 camera_up_vector= glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global) //still using that
-
-        glm::vec4 w=(-free_camera_view_vector)/norm(free_camera_view_vector);
-        glm::vec4 u=crossproduct(camera_up_vector,w)/norm(crossproduct(camera_up_vector,w));
 
 
-        if(w_was_press)
-            camera_position_c += -w * 0.03f;
-        if(s_was_press)
-            camera_position_c += w *  0.03f;
-        if(d_was_press)
-            camera_position_c +=u *  0.03f;
-        if(a_was_press)
-            camera_position_c +=-u *  0.03f;
-
-        // Computamos a matriz "View" utilizando os parâmetros da câmera para
-        // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::mat4 view = Matrix_Camera_View(camera_position_c, free_camera_view_vector, camera_up_vector);
         // Agora computamos a matriz de Projeção.
+
         glm::mat4 projection;
 
         // Note que, no sistema de coordenadas da câmera, os planos near e far
@@ -581,14 +883,17 @@ float previous_time=(float)glfwGetTime();
         glUniformMatrix4fv(view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
-        #define SPHERE 0
+        // definimos os ids dos objetos
+        #define BOX 0
         #define BUNNY  1
         #define PLANE  2
         #define ORANGE 3
         #define BITCOIN 4
-        #define LENGTH 5
         #define SKULL 5
         #define BANANA 6
+
+        //define tamanho do plano
+        #define LENGTH 5
 
 
 
@@ -597,190 +902,127 @@ float previous_time=(float)glfwGetTime();
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, PLANE);
         DrawVirtualObject("plane");
-                // Desenhamos o modelo do plano
+        // Desenhamos o modelo do plano
         model = Matrix_Translate(0.0f,-6,0.0f)*Matrix_Scale(LENGTH,1.0f,LENGTH);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, PLANE);
         DrawVirtualObject("plane");
-
+        // Desenhamos o modelo do plano
         model = Matrix_Translate(LENGTH,-1.0f,0.0f)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Z(3.14/2)*Matrix_Scale(LENGTH,1.0f,LENGTH);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, PLANE);
         DrawVirtualObject("plane");
-                model = Matrix_Translate(-LENGTH,-1.0f,0.0f)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Z(-3.14/2)*Matrix_Scale(LENGTH,1.0f,LENGTH);
+        // Desenhamos o modelo do plano
+        model = Matrix_Translate(-LENGTH,-1.0f,0.0f)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Z(-3.14/2)*Matrix_Scale(LENGTH,1.0f,LENGTH);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, PLANE);
         DrawVirtualObject("plane");
 
 
-
-/*
-        // Desenhamos o modelo da esfera
-
-        glm::mat4 model_box = Matrix_Identity();
-        model_box = Matrix_Translate(-1.0f,0.0f,-2.0f);
-        PushMatrix(model_box);
-            model_box=model_box*Matrix_Scale(0.2,0.2,0.2);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model_box));
-            glUniform1i(object_id_uniform, SPHERE);
-
-            DrawVirtualObject("Crate_Plane.005");
-        PopMatrix(model_box);
-
-        PushMatrix(model_box);
-            model_box = Matrix_Translate(-2.5f,0.0f,-2.0f);
-            PushMatrix(model_box);
-                model_box=model_box*Matrix_Scale(0.2,0.2,0.2);
-                glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model_box));
-                glUniform1i(object_id_uniform, SPHERE);
-
-                DrawVirtualObject("Crate_Plane.005");
-            PopMatrix(model_box);
-        PopMatrix(model_box);
-*/
-           model = Matrix_Translate(camera_position_c.x+0.5,camera_position_c.y-0.4,camera_position_c.z-0.4)*Matrix_Rotate_Z(3.14/2)*Matrix_Rotate_X(3.14/2)*Matrix_Scale(0.03,0.03,0.03);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(object_id_uniform, SPHERE);
-            DrawVirtualObject("15797_Pointer_v1");
-
-        float posz_atual;
-
-
-
-        for (int aux=0; aux < 9; aux++){
-        if(Boxes[aux].is_selected==false)
-           model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
-
-        else{
-
-
-                    if(oks[aux]){
-                        model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
-                        Boxes[aux].posz=Boxes[aux].posz-delta_time;
-                        std::cout<<Boxes[aux].posz<<std::endl;
-                    }
-
-                    else{
-                        model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
-                    }
-                    if(Boxes[aux].posz<-3)
-                        oks[aux]=false;
+        //desenha a mão
+        model = Matrix_Translate(camera_position_c.x+0.5,camera_position_c.y-0.4,camera_position_c.z-0.4)*Matrix_Rotate_Z(3.14/2)*Matrix_Rotate_X(3.14/2)*Matrix_Scale(0.03,0.03,0.03);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, HAND);
+        DrawVirtualObject("15797_Pointer_v1");
 
 
 
 
+    //lógica de controle para movimentação conforme curva de bezier não ser infinita
 
-                //posz_atual=Boxes[aux].posz-float(glfwGetTime())*0.1f
-            }
+        if (should_go)  // se está indo
+        {
+            t+=delta_time*0.2; //aumenta t
+        }
 
+        if(should_return) // se esta voltando
+        {
+            t-=delta_time*0.2; //diminui t
 
+        }
 
-           //model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz-float(glfwGetTime())*0.1f)*Matrix_Scale(0.2,0.2,0.2);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(object_id_uniform, SPHERE);
-            DrawVirtualObject("Crate_Plane.005");
+        if(t>=1){ //se t for maior que 1, completou a trajetoria
+             should_return=true; // então volta
+             should_go=false;
+
+        }
+        else
+            if(t<=0){ // se t menor que 0 completou a trajetória também
+            should_return=false;
+            should_go=true; // então vai novamente
+
         }
 
 
-/*
-
-        if(Boxes[0].is_selected==false)
-           model = Matrix_Translate(Boxes[0].posx, Boxes[0].posy,Boxes[0].posz)*Matrix_Scale(0.2,0.2,0.2);
-        else{
-
-
-                    if(oks[0]){
-                        model = Matrix_Translate(Boxes[0].posx, Boxes[0].posy,Boxes[0].posz)*Matrix_Scale(0.2,0.2,0.2);
-                        Boxes[0].posz=Boxes[0].posz-float(glfwGetTime())*0.001f;
-                        std::cout<<Boxes[0].posz<<std::endl;
-                    }
-
-                    else{
-                        model = Matrix_Translate(Boxes[0].posx, Boxes[0].posy,Boxes[0].posz)*Matrix_Scale(0.2,0.2,0.2);
-                    }
-                    if(Boxes[0].posz<-3)
-                        oks[0]=false;
-
-
-
-
-
-                //posz_atual=Boxes[aux].posz-float(glfwGetTime())*0.1f
-            }
-
-
-
-           //model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz-float(glfwGetTime())*0.1f)*Matrix_Scale(0.2,0.2,0.2);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(object_id_uniform, SPHERE);
-            DrawVirtualObject("Crate_Plane.005");
-
-                if(Boxes[1].is_selected==false)
-           model = Matrix_Translate(Boxes[1].posx, Boxes[1].posy,Boxes[1].posz)*Matrix_Scale(0.2,0.2,0.2);
-        else{
-
-
-
-                    if(oks[1]){
-                        model = Matrix_Translate(Boxes[1].posx, Boxes[1].posy,Boxes[1].posz)*Matrix_Scale(0.2,0.2,0.2);
-                        Boxes[1].posz=Boxes[1].posz-float(glfwGetTime())*0.001f;
-                        std::cout<<Boxes[1].posz<<std::endl;
-                    }
-
-                    else{
-                        model = Matrix_Translate(Boxes[1].posx, Boxes[1].posy,Boxes[1].posz)*Matrix_Scale(0.2,0.2,0.2);
-                    }
-                    if(Boxes[1].posz<-3)
-                        oks[1]=false;
-
-
-
-
-
-                //posz_atual=Boxes[aux].posz-float(glfwGetTime())*0.1f
-            }
-
-
-
-           //model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz-float(glfwGetTime())*0.1f)*Matrix_Scale(0.2,0.2,0.2);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(object_id_uniform, SPHERE);
-            DrawVirtualObject("Crate_Plane.005");
-*/
-
+        //desenha apenas as recompensas que foram selecionadas e com de uma curva de bezier cúbica
 
         for (int aux=0; aux < 3; aux++){
-            model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5, Rewards[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
+           if(Rewards[selects[aux]].type=="Orange")
+           {
+            // posição calcula com a curva de bezier
+            glm::vec4 p1 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz,1.0f);
+            glm::vec4 p2 = glm::vec4(Rewards[selects[aux]].posx+1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+0.5,1.0f);
+            glm::vec4 p3 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+1,1.0f);
+            glm::vec4 p4 = glm::vec4(Rewards[selects[aux]].posx-1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz-0.5,1.0f);
+            glm::vec4 bezier_pos=bezier_position(p1,p2,p3,p4,t);
+            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(0.8,0.8,0.8);
             glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
             glUniform1i(object_id_uniform, ORANGE);
+
             DrawVirtualObject("Orange");
-        }
-        for (int aux=3; aux < 5; aux++){
-            model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5, Rewards[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(object_id_uniform, BUNNY);
-            DrawVirtualObject("bunny");
-        }
-        for (int aux=5; aux < 6; aux++){
-            model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5,Rewards[aux].posz)*Matrix_Scale(0.1,0.1,0.1);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(object_id_uniform, BITCOIN);
-            DrawVirtualObject("16783_Zeus_v1_NEW.001");
-        }
-
-        for (int aux=6; aux < 7; aux++){
-            model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.3,Rewards[aux].posz)*Matrix_Scale(1.8,1.8,1.8);
-            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(object_id_uniform, SKULL);
-            DrawVirtualObject("Skull");
-        }
-
-        for (int aux=7; aux < 9; aux++){
-            model = Matrix_Translate(Rewards[aux].posx, Rewards[aux].posy+0.5,Rewards[aux].posz)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Y(3.14/2)*Matrix_Scale(0.35,0.35,0.35);
+           }
+           else if(Rewards[selects[aux]].type=="banana_mesh_quad.001"){
+            // posição calcula com a curva de bezier
+            glm::vec4 p1 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz,1.0f);
+            glm::vec4 p2 = glm::vec4(Rewards[selects[aux]].posx+1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+0.5,1.0f);
+            glm::vec4 p3 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+1,1.0f);
+            glm::vec4 p4 = glm::vec4(Rewards[selects[aux]].posx-1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz-0.5,1.0f);
+            glm::vec4 bezier_pos=bezier_position(p1,p2,p3,p4,t);
+            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Rotate_X(3.14/2)*Matrix_Rotate_Y(3.14/2)*Matrix_Scale(1.1,1.1,1.1);
             glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
             glUniform1i(object_id_uniform, BANANA);
             DrawVirtualObject("banana_mesh_quad.001");
+           }
+            else if(Rewards[selects[aux]].type=="Skull"){
+            // posição calcula com a curva de bezier
+            glm::vec4 p1 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy,Rewards[selects[aux]].posz,1.0f);
+            glm::vec4 p2 = glm::vec4(Rewards[selects[aux]].posx+1,Rewards[selects[aux]].posy,Rewards[selects[aux]].posz+0.5,1.0f);
+            glm::vec4 p3 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy,Rewards[selects[aux]].posz+1,1.0f);
+            glm::vec4 p4 = glm::vec4(Rewards[selects[aux]].posx-1,Rewards[selects[aux]].posy,Rewards[selects[aux]].posz-0.5,1.0f);
+            glm::vec4 bezier_pos=bezier_position(p1,p2,p3,p4,t);
+            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(6.8,6.8,6.8);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, SKULL);
+            DrawVirtualObject("Skull");
+           }
+            else if(Rewards[selects[aux]].type=="bunny"){
+            // posição calcula com a curva de bezier
+            glm::vec4 p1 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz,1.0f);
+            glm::vec4 p2 = glm::vec4(Rewards[selects[aux]].posx+1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+0.5,1.0f);
+            glm::vec4 p3 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+1,1.0f);
+            glm::vec4 p4 = glm::vec4(Rewards[selects[aux]].posx-1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz-0.5,1.0f);
+            glm::vec4 bezier_pos=bezier_position(p1,p2,p3,p4,t);
+            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(0.8,0.8,0.8);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, BUNNY);
+            DrawVirtualObject("bunny");
+           }
+            else if(Rewards[selects[aux]].type=="16783_Zeus_v1_NEW.001"){
+            // posição calcula com a curva de bezier
+            glm::vec4 p1 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz,1.0f);
+            glm::vec4 p2 = glm::vec4(Rewards[selects[aux]].posx+1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+0.5,1.0f);
+            glm::vec4 p3 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+1,1.0f);
+            glm::vec4 p4 = glm::vec4(Rewards[selects[aux]].posx-1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz-0.5,1.0f);
+            glm::vec4 bezier_pos=bezier_position(p1,p2,p3,p4,t);
+            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(0.2,0.2,0.2);
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, BITCOIN);
+            DrawVirtualObject("16783_Zeus_v1_NEW.001");
+           }
+
         }
+
+
 
 
 
@@ -818,9 +1060,6 @@ float previous_time=(float)glfwGetTime();
         // definidas anteriormente usando glfwSet*Callback() serão chamadas
         // pela biblioteca GLFW.
         glfwPollEvents();
-    }
-    else{
-
     }
 
     }
@@ -960,12 +1199,14 @@ void LoadShadersFromFiles()
     object_id_uniform       = glGetUniformLocation(program_id, "object_id"); // Variável "object_id" em shader_fragment.glsl
     bbox_min_uniform        = glGetUniformLocation(program_id, "bbox_min");
     bbox_max_uniform        = glGetUniformLocation(program_id, "bbox_max");
+    spotlight_uniform       = glGetUniformLocation(program_id, "spotlight");
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(program_id);
     glUniform1i(glGetUniformLocation(program_id, "TextureImage0"), 0);
     glUniform1i(glGetUniformLocation(program_id, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(program_id, "TextureImage2"), 2);
+    glUniform1i(glGetUniformLocation(program_id, "TextureImage3"), 3);
     glUseProgram(0);
 }
 
@@ -1345,6 +1586,19 @@ GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id)
     return program_id;
 }
 
+// Função que calcula a curva de bezier
+//baseado na aula 16 slide 82
+glm::vec4 bezier_position(glm::vec4 p1,glm::vec4 p2,glm::vec4 p3,glm::vec4 p4,float t )
+{
+    float b03= (1 - t) * (1 - t) * (1 - t);
+    float b13= 3 * t * (1 - t) * (1 - t);
+    float b23= 3* t * t * (1-t);
+    float b33 = t * t * t;
+
+    return b03 * p1 + b13 * p2 + b23 * p3 + b33 * p4;
+
+}
+
 // Definição da função que será chamada sempre que a janela do sistema
 // operacional for redimensionada, por consequência alterando o tamanho do
 // "framebuffer" (região de memória onde são armazenados os pixels da imagem).
@@ -1538,29 +1792,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
     if (key == GLFW_KEY_X && action == GLFW_PRESS)
     {
-        g_AngleX += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
+        LoadShadersFromFiles();
+        fprintf(stdout,"Shaders recarregados!\n");
+        fflush(stdout);
     }
 
-    if (key == GLFW_KEY_Y && action == GLFW_PRESS)
-    {
-        g_AngleY += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-    }
-    if (key == GLFW_KEY_Z && action == GLFW_PRESS)
-    {
-        g_AngleZ += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-    }
-
-    // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
-    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
-    {
-        g_AngleX = 0.0f;
-        g_AngleY = 0.0f;
-        g_AngleZ = 0.0f;
-        g_ForearmAngleX = 0.0f;
-        g_ForearmAngleZ = 0.0f;
-        g_TorsoPositionX = 0.0f;
-        g_TorsoPositionY = 0.0f;
-    }
 
     // Se o usuário apertar a tecla P, utilizamos projeção perspectiva.
     if (key == GLFW_KEY_P && action == GLFW_PRESS)
@@ -1572,8 +1808,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_O && action == GLFW_PRESS)
     {
         g_UsePerspectiveProjection = false;
-
-
     }
 
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
@@ -1584,45 +1818,69 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         {
             std::cout<<selects[aux]<<std::endl;
         }
-        ok=0;
+
+        game_is_running=false;
+        g_CameraTheta=3.14*2;
     }
 
-    // Se o usuário apertar a tecla R, recarregamos os shaders dos arquivos "shader_fragment.glsl" e "shader_vertex.glsl".
+    // Se o usuário apertar a tecla R, o jogo recomeça, podendo escolher mais 3 caixas .
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
     {
-        LoadShadersFromFiles();
-        fprintf(stdout,"Shaders recarregados!\n");
-        fflush(stdout);
-        player.points-=400;
-    }
-    // Parte que controla o movimento wasd pelo usuário
-    if (key == GLFW_KEY_W && action == GLFW_PRESS)
-    {
-
-        w_was_press = true;
-    } else if (key == GLFW_KEY_W && action == GLFW_RELEASE) {
-        w_was_press = false;
-
-    }
-        if (key == GLFW_KEY_E&& action == GLFW_PRESS)
-    {
-        std::vector<bool> selections;
-        for(int aux=0;aux<9;aux++)
-        {
-            selections.push_back(Boxes[aux].is_selected);
-        }
-        int count_s=std::count(selections.begin(), selections.end(), true);
-       if(count_s==0){
-
-             std::vector<int> numbers;
+        // lógica que seta as recompensas em caixas aleatórias novamente
+        //esta lógica foi usada a partir de uma resposta do stackoverflow https://stackoverflow.com/questions/36922371/generate-different-random-numbers
+        std::vector<int> numbers;
         for(int i=0; i<9; i++)
             numbers.push_back(i);
 
         unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
         std::shuffle(numbers.begin(), numbers.end(), std::default_random_engine(seed));
         int number;
-        for(int i=0; i<9; i++)
-            std::cout << numbers[i] << std::endl;
+
+        // reseta todas variaveis que determinam o funcionamento do jogo
+        for (int aux=0; aux < 9; aux++){
+            number=numbers[aux];
+            Rewards[aux].id=number;
+            Rewards[aux].posx=Boxes[number].posx;
+            Rewards[aux].posy=Boxes[number].posy;
+            Boxes[number].posz=-2;
+            Boxes[number].is_selected=false;
+            Rewards[aux].posz=Boxes[number].posz;
+            Rewards[aux].is_ok=true;
+            posz_atuals[aux]=false;
+            oks[aux]=true;
+            selects.clear();
+
+        }
+        correct_points=0;// reseta o número de caixas na posição certa
+        //std::cout<<correct_points<<std::endl;
+        //player é subtraido 400 pontos (nova aposta)
+        player.points-=400;
+    }
+
+     // Se o usuário apertar a tecla E, as recompensas são aleatóriamente embaralhadas nas caixas .
+    if (key == GLFW_KEY_E&& action == GLFW_PRESS)
+    {
+        //vetor que controla se as caixas foram selecionadas
+        std::vector<bool> selections;
+        for(int aux=0;aux<9;aux++)
+        {
+            selections.push_back(Boxes[aux].is_selected);
+        }
+        // variavel que controla quantas caixas foram selecionadas
+        int count_s=std::count(selections.begin(), selections.end(), true);
+
+        // se nenhuma caixa foi selecionada ainda embaralha as recompensas
+        if(count_s==0){
+        //esta lógica foi usada a partir de uma resposta do stackoverflow https://stackoverflow.com/questions/36922371/generate-different-random-numbers
+            std::vector<int> numbers;
+            for(int i=0; i<9; i++)
+                numbers.push_back(i);
+
+            unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+            std::shuffle(numbers.begin(), numbers.end(), std::default_random_engine(seed));
+            int number;
+            for(int i=0; i<9; i++)
+                std::cout << numbers[i] << std::endl;
 
             for (int aux=0; aux < 9; aux++){
             number=numbers[aux];
@@ -1630,13 +1888,17 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
             Rewards[aux].posx=Boxes[number].posx;
             Rewards[aux].posy=Boxes[number].posy;
             Rewards[aux].posz=Boxes[number].posz;
-
-        }
+            }
 
        }
     }
 
-       if (key == GLFW_KEY_1 && action == GLFW_PRESS)
+//************************************************************************
+
+// seção utilizada para teclas que o usuário aperta para escolher as caixas
+
+    // se o usuário apertar a tecla 1, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_1 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1647,10 +1909,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[0].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==0)
-               {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1659,14 +1921,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
                 player.points+=Rewards[selected].points;
                 Rewards[selected].is_ok=false;
             }
-
-
-
         }
 
-
     }
-       if (key == GLFW_KEY_2 && action == GLFW_PRESS)
+     // se o usuário apertar a tecla 2, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_2 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1677,10 +1936,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[1].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==1)
-                {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1692,7 +1951,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         }
     }
-       if (key == GLFW_KEY_3 && action == GLFW_PRESS)
+    // se o usuário apertar a tecla 3, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_3 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1703,10 +1963,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[2].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==2)
-               {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1718,7 +1978,9 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         }
     }
-       if (key == GLFW_KEY_4 && action == GLFW_PRESS)
+
+    // se o usuário apertar a tecla 4, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_4 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1729,10 +1991,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[3].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==3)
-               {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1744,8 +2006,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         }
     }
-
-       if (key == GLFW_KEY_5 && action == GLFW_PRESS)
+ // se o usuário apertar a tecla 5, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_5 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1756,10 +2018,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[4].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==4)
-                {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1771,8 +2033,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         }
     }
-
-       if (key == GLFW_KEY_6 && action == GLFW_PRESS)
+ // se o usuário apertar a tecla 6, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_6 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1783,10 +2045,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[5].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==5)
-               {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1798,8 +2060,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         }
     }
-
-       if (key == GLFW_KEY_7 && action == GLFW_PRESS)
+    // se o usuário apertar a tecla 7, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_7 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1810,10 +2072,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[6].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==6)
-                {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1825,8 +2087,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         }
     }
-
-       if (key == GLFW_KEY_8 && action == GLFW_PRESS)
+ // se o usuário apertar a tecla 8, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_8 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1837,10 +2099,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[7].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==7)
-                {
+            {
                 selected=aux;
                 selects.push_back(selected);
             }
@@ -1852,8 +2114,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         }
     }
-
-       if (key == GLFW_KEY_9 && action == GLFW_PRESS)
+ // se o usuário apertar a tecla 9, seleciona a tecla 1 e conta os pontos da recompensa que está na caixa
+    if (key == GLFW_KEY_9 && action == GLFW_PRESS)
     {
         std::vector<bool> selections;
         for(int aux=0;aux<9;aux++)
@@ -1864,7 +2126,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int count_s=std::count(selections.begin(), selections.end(), true);
         if(count_s<MAX){
             Boxes[8].is_selected=true;
-            for(int aux=0;aux<9;aux++)
+        for(int aux=0;aux<9;aux++)
         {
             if(Rewards[aux].id==8){
                 selected=aux;
@@ -1879,28 +2141,40 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         }
     }
 
+//fim da seção
+//************************************************************************
 
+    // Parte que controla o movimento wasd pelo usuário
 
+    // se apertar w seta w_was_press pra true e movimenta pra frente
+    if (key == GLFW_KEY_W && action == GLFW_PRESS)
+    {
 
+        w_was_press = true;
+    } else if (key == GLFW_KEY_W && action == GLFW_RELEASE) { //se não para de movimentar
+        w_was_press = false;
 
+    }
+    // se apertar a seta a_was_press pra true e movimenta pra esquerda
     if (key == GLFW_KEY_A && action == GLFW_PRESS)
     {
         a_was_press = true;
-    } else if (key == GLFW_KEY_A && action == GLFW_RELEASE) {
+    } else if (key == GLFW_KEY_A && action == GLFW_RELEASE) {//se não para de movimentar
         a_was_press = false;
     }
-
+    // se apertar s seta s_was_press pra true e movimenta pra tras
     if (key == GLFW_KEY_S && action == GLFW_PRESS)
     {
         s_was_press = true;
-    } else if (key == GLFW_KEY_S && action == GLFW_RELEASE) {
+    } else if (key == GLFW_KEY_S && action == GLFW_RELEASE) {//se não para de movimentar
         s_was_press = false;
     }
 
+ // se apertar d seta d_was_press pra true e movimenta pra direita
     if (key == GLFW_KEY_D && action == GLFW_PRESS)
     {
         d_was_press = true;
-    } else if (key == GLFW_KEY_D && action == GLFW_RELEASE) {
+    } else if (key == GLFW_KEY_D && action == GLFW_RELEASE) {//se não para de movimentar
         d_was_press = false;
     }
 }
