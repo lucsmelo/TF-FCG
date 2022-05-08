@@ -116,20 +116,10 @@ void main()
     else if ( object_id == BUNNY )
     {
 
-        float minx = bbox_min.x;
-        float maxx = bbox_max.x;
+        Kd = vec3(0.08,0.4,0.8);
+        Ks = vec3(0.8,0.8,0.8);
+        Ka = vec3(0.04,0.2,0.4);
 
-        float miny = bbox_min.y;
-        float maxy = bbox_max.y;
-
-        float minz = bbox_min.z;
-        float maxz = bbox_max.z;
-
-        U = (position_model.x-minx)/(maxx - minx);
-        V = (position_model.y-miny)/(maxy - miny);
-
-        Kd = texture(TextureImage0, vec2(U,V)).rgb;
-        Ks = vec3(0.0,0.0,0.0);
 
 
         q = 32.0;
@@ -140,8 +130,10 @@ void main()
     // Termo ambiente
     vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-
-    color.rgb = lambert_diffuse_term + ambient_term;
+    // Termo especular utilizando o modelo de iluminação de Phong
+    vec4 h= normalize(v+l);//slide 150 aula 17-18
+    vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Phong
+    color.rgb = lambert_diffuse_term + ambient_term + blinn_phong_specular_term ;
     }
     else if ( object_id == PLANE )
     {

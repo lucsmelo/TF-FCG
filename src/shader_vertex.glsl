@@ -102,10 +102,11 @@ void main()
     // Termo ambiente
     vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*I*pow(max(0, dot(r,v)), q); // o termo especular de Phong
+    // Termo especular utilizando o modelo de iluminação de Blinn-Phong
+    vec4 h= normalize(v+l);//slide 150 aula 17-18
+    vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Blinn-Phong
 
-    color_gou= lambert_diffuse_term + ambient_term + phong_specular_term;
+    color_gou= lambert_diffuse_term + ambient_term + blinn_phong_specular_term;
 
 }
 

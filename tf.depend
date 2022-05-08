@@ -24,7 +24,7 @@
 	<inttypes.h>
 	<stdint.h>
 
-1651975236 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\main.cpp
+1651978212 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\main.cpp
 	<cmath>
 	<cstdio>
 	<cstdlib>
@@ -944,4 +944,6 @@
 
 1648506708 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\tiny_obj_loader.cpp
 	"tiny_obj_loader.h"
+
+1651978492 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\collisions.cpp
 
