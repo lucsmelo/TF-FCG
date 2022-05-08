@@ -69,6 +69,8 @@ void main()
     vec4 l = normalize(camera_position - p);
 
 
+
+
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
 
@@ -92,6 +94,19 @@ void main()
     float U = 0.0;
     float V = 0.0;
 
+/* tentativa falha de implementar luz spotlight na tela final
+
+    vec4 l_spotlight = vec4(0.0, 2.0, 1.0, 1.0);
+    vec4 v_spotlight = vec4(0.0, -1.0, 0.0, 0.0);
+
+    vec4 l_spot = normalize(l_spotlight -p);
+    float pi=3.14159265358979;
+    int angle=30;
+    float angle_to_rad=angle*pi/180;
+    float alpha=cos(angle_to_rad);
+    float beta=dot(normalize(p - l_spotlight),normalize(v_spotlight));
+    bool beta_alpha=beta<alpha;
+*/
     if ( object_id == BOX )
     {
         // Propriedades espectrais da caixa
@@ -115,24 +130,27 @@ void main()
     }
     else if ( object_id == BUNNY )
     {
-
+        //propriedades espectrais do coelho
         Kd = vec3(0.08,0.4,0.8);
         Ks = vec3(0.8,0.8,0.8);
         Ka = vec3(0.04,0.2,0.4);
 
-
-
         q = 32.0;
 
     // Termo difuso utilizando a lei dos cossenos de Lambert
-    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
 
+    vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // o termo difuso de Lambert
+    /*
+    if(spotlight)
+        lambert_diffuse_term = Kd*I*max(0, dot(n,l_spot));
+    */
     // Termo ambiente
     vec3 ambient_term =  Ka*Ia;// o termo ambiente
 
     // Termo especular utilizando o modelo de iluminação de Phong
     vec4 h= normalize(v+l);//slide 150 aula 17-18
     vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Phong
+
     color.rgb = lambert_diffuse_term + ambient_term + blinn_phong_specular_term ;
     }
     else if ( object_id == PLANE )
@@ -152,8 +170,21 @@ void main()
         // Termo especular utilizando o modelo de iluminação de Phong
         vec4 h= normalize(v+l);//slide 150 aula 17-18
         vec3 blinn_phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // o termo especular de Phong
-
         color.rgb = lambert_diffuse_term + ambient_term;
+
+    //tentativa falha de implementar luz spotlight na tela final
+    /*
+    if (beta_alpha) { // se não for iluminado , então apenas o termo ambiente, sem termos de iluminação de phong e lambert
+        if(spotlight)
+            color.rgb =  ambient_term ;
+        else{
+             color.rgb = lambert_diffuse_term + ambient_term;
+        }
+
+
+    }
+    else
+        color.rgb = lambert_diffuse_term + ambient_term;*/
     }
 
         else if ( object_id == ORANGE )
@@ -282,6 +313,7 @@ void main()
         Ka = vec3(0.0,0.0,0.0);
         q = 1.0;
     }
+
 
 
 

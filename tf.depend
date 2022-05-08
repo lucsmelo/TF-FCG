@@ -24,7 +24,7 @@
 	<inttypes.h>
 	<stdint.h>
 
-1651978212 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\main.cpp
+1652044783 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\main.cpp
 	<cmath>
 	<cstdio>
 	<cstdlib>
@@ -50,6 +50,7 @@
 	<stb_image.h>
 	"utils.h"
 	"matrices.h"
+	"collisions.h"
 
 1648506708 c:\users\lucas\onedrive\documentos\github\tf-fcg\include\glfw\glfw3.h
 	<stddef.h>
@@ -945,5 +946,14 @@
 1648506708 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\tiny_obj_loader.cpp
 	"tiny_obj_loader.h"
 
-1651978492 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\collisions.cpp
+1652045191 source:c:\users\lucas\onedrive\documentos\github\tf-fcg\src\collisions.cpp
+	<string>
+	<iostream>
+	<glad/glad.h>
+	<GLFW/glfw3.h>
+	<glm/mat4x4.hpp>
+	<glm/vec4.hpp>
+	"collisions.h"
+
+1651993021 c:\users\lucas\onedrive\documentos\github\tf-fcg\include\collisions.h
 

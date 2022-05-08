@@ -51,7 +51,7 @@
 // Headers locais, definidos na pasta "include/"
 #include "utils.h"
 #include "matrices.h"
-
+#include "collisions.h"
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
 struct ObjModel
@@ -131,6 +131,9 @@ glm::vec4 bezier_position(glm::vec4 p1,glm::vec4 p2,glm::vec4 p3,glm::vec4 p4,fl
 
 // Definimos uma estrutura que armazenará dados necessários para renderizar
 // cada objeto da cena virtual.
+//************************************
+//ESTA SEÇÃO FOI MOVIDA PARA COLLISIONS.H
+/*
 struct SceneObject
 {
     std::string  name;        // Nome do objeto
@@ -142,7 +145,6 @@ struct SceneObject
     glm::vec3    bbox_max;
 };
 
-// Estrutura que contém as informações da caixa
 struct Box{
 
     int id; //id da caixa(identificador de posição)
@@ -152,6 +154,9 @@ struct Box{
     bool is_selected; // bool para verificar se ela foi selecionada
 
 };
+
+//************************************
+*/
 
 //vetor que armazena as caixas
 std::vector<Box>Boxes;
@@ -280,6 +285,7 @@ float t=0; // variavel "t" no calculo de bezier
 bool should_go=true; // se está indo
 bool should_return=false; //se esta voltando
 
+std::vector<SceneObject> scenes_objs;
 //máximo de caixas possiveis a serem escolhidas
 #define MAX 3
 int main(int argc, char* argv[])
@@ -311,7 +317,7 @@ int main(int argc, char* argv[])
     // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
     // de pixels, e com título "INF01047 ...".
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "INF01047 - 00315747 - Lucas Lima de Melo", NULL, NULL);
+    window = glfwCreateWindow(800, 600, "CASSINO VIRTUAL", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -444,7 +450,7 @@ int main(int argc, char* argv[])
         Rewards[aux].posy=Boxes[number].posy;
         Rewards[aux].posz=Boxes[number].posz;
         Rewards[aux].type="bunny";
-        Rewards[aux].points=150;
+        Rewards[aux].points=200;
         Rewards[aux].is_ok=true;
     }
 // cria as recompensas do tipo bitcoin com suas devidas informações
@@ -480,7 +486,7 @@ int main(int argc, char* argv[])
         Rewards[aux].posy=Boxes[number].posy;
         Rewards[aux].posz=Boxes[number].posz;
         Rewards[aux].type="banana_mesh_quad.001";
-        Rewards[aux].points=200;
+        Rewards[aux].points=150;
         Rewards[aux].is_ok=true;
     }
 
@@ -516,8 +522,17 @@ int main(int argc, char* argv[])
     glm::mat4 the_projection;
     glm::mat4 the_model;
     glm::mat4 the_view;
-
+    SceneObject a;
+    SceneObject b;
     glUniform1i(spotlight_uniform,false);
+
+    // variaveis auxiliares para controlar colisão plano-caixa
+    for(int aux=0;aux<scenes_objs.size();aux++){
+        if(scenes_objs[aux].name=="plane")
+            a=scenes_objs[aux];
+        else if(scenes_objs[aux].name=="Crate_Plane.005")
+            b=scenes_objs[aux];
+    }
 
     // Ficamos em loop, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
@@ -705,7 +720,7 @@ int main(int argc, char* argv[])
                             model = Matrix_Translate(Boxes[aux].posx, Boxes[aux].posy,Boxes[aux].posz)*Matrix_Scale(0.2,0.2,0.2);
                         }
 
-                        if(Boxes[aux].posz<-4) //era pra testar a colisão com plano aqui e setar para parar de se mover
+                        if(checkPlaneBoxColl(b,a,Boxes[aux])) //se colidiu com plano para de se mover
                         {
                             posz_atuals[aux]=true;
                              oks[aux]=false;
@@ -719,7 +734,6 @@ int main(int argc, char* argv[])
                 glUniform1i(object_id_uniform, BOX);
                 DrawVirtualObject("Crate_Plane.005");
             }
-
 
 
             // desenha as laranjas
@@ -761,7 +775,6 @@ int main(int argc, char* argv[])
 
 
 
-
             // Pegamos um vértice com coordenadas de modelo (0.5, 0.5, 0.5, 1) e o
             // passamos por todos os sistemas de coordenadas armazenados nas
             // matrizes the_model, the_view, e the_projection; e escrevemos na tela
@@ -771,15 +784,15 @@ int main(int argc, char* argv[])
 
             // Imprimimos na tela os ângulos de Euler que controlam a rotação do
             // terceiro cubo.
-            TextRendering_ShowEulerAngles(window);
+           // TextRendering_ShowEulerAngles(window);
 
             // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
-            TextRendering_ShowProjection(window);
+            //TextRendering_ShowProjection(window);
 
             // Imprimimos na tela informação sobre o número de quadros renderizados
             // por segundo (frames per second).
             TextRendering_ShowFramesPerSecond(window);
-
+            // Imprime os pontos na tela
             TextRendering_ShowPoints(window);
 
             // O framebuffer onde OpenGL executa as operações de renderização não
@@ -919,15 +932,6 @@ int main(int argc, char* argv[])
         DrawVirtualObject("plane");
 
 
-        //desenha a mão
-        model = Matrix_Translate(camera_position_c.x+0.5,camera_position_c.y-0.4,camera_position_c.z-0.4)*Matrix_Rotate_Z(3.14/2)*Matrix_Rotate_X(3.14/2)*Matrix_Scale(0.03,0.03,0.03);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, HAND);
-        DrawVirtualObject("15797_Pointer_v1");
-
-
-
-
     //lógica de controle para movimentação conforme curva de bezier não ser infinita
 
         if (should_go)  // se está indo
@@ -965,7 +969,7 @@ int main(int argc, char* argv[])
             glm::vec4 p3 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+1,1.0f);
             glm::vec4 p4 = glm::vec4(Rewards[selects[aux]].posx-1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz-0.5,1.0f);
             glm::vec4 bezier_pos=bezier_position(p1,p2,p3,p4,t);
-            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(0.8,0.8,0.8);
+            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(0.8,0.8,0.4);
             glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
             glUniform1i(object_id_uniform, ORANGE);
 
@@ -1036,10 +1040,10 @@ int main(int argc, char* argv[])
 
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
         // terceiro cubo.
-        TextRendering_ShowEulerAngles(window);
+        //TextRendering_ShowEulerAngles(window);
 
         // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
-        TextRendering_ShowProjection(window);
+        //TextRendering_ShowProjection(window);
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
@@ -1379,6 +1383,7 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
 
         theobject.bbox_min = bbox_min;
         theobject.bbox_max = bbox_max;
+        scenes_objs.push_back(theobject);// adiciona o objeto para testar colisão
 
         g_VirtualScene[model->shapes[shape].name] = theobject;
     }
@@ -1796,12 +1801,13 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         fprintf(stdout,"Shaders recarregados!\n");
         fflush(stdout);
     }
-
+/*
 
     // Se o usuário apertar a tecla P, utilizamos projeção perspectiva.
     if (key == GLFW_KEY_P && action == GLFW_PRESS)
     {
         g_UsePerspectiveProjection = true;
+
     }
 
     // Se o usuário apertar a tecla O, utilizamos projeção ortográfica.
@@ -1809,19 +1815,14 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     {
         g_UsePerspectiveProjection = false;
     }
+    */
 
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
         g_ShowInfoText = !g_ShowInfoText;
-            for(int aux=0;aux<selects.size();aux++)
-        {
-            std::cout<<selects[aux]<<std::endl;
-        }
-
-        game_is_running=false;
-        g_CameraTheta=3.14*2;
     }
+
 
     // Se o usuário apertar a tecla R, o jogo recomeça, podendo escolher mais 3 caixas .
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
@@ -1837,24 +1838,29 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         int number;
 
         // reseta todas variaveis que determinam o funcionamento do jogo
-        for (int aux=0; aux < 9; aux++){
-            number=numbers[aux];
-            Rewards[aux].id=number;
-            Rewards[aux].posx=Boxes[number].posx;
-            Rewards[aux].posy=Boxes[number].posy;
-            Boxes[number].posz=-2;
-            Boxes[number].is_selected=false;
-            Rewards[aux].posz=Boxes[number].posz;
-            Rewards[aux].is_ok=true;
-            posz_atuals[aux]=false;
-            oks[aux]=true;
-            selects.clear();
+        if(correct_points==MAX)
+        {
+            for (int aux=0; aux < 9; aux++){
+                number=numbers[aux];
+                Rewards[aux].id=number;
+                Rewards[aux].posx=Boxes[number].posx;
+                Rewards[aux].posy=Boxes[number].posy;
+                Boxes[number].posz=-2;
+                Boxes[number].is_selected=false;
+                Rewards[aux].posz=Boxes[number].posz;
+                Rewards[aux].is_ok=true;
+                posz_atuals[aux]=false;
+                oks[aux]=true;
+                selects.clear();
 
+            }
+            correct_points=0;// reseta o número de caixas na posição certa
+            //std::cout<<correct_points<<std::endl;
+            //player é subtraido 400 pontos (nova aposta)
+            player.points-=400;
         }
-        correct_points=0;// reseta o número de caixas na posição certa
-        //std::cout<<correct_points<<std::endl;
-        //player é subtraido 400 pontos (nova aposta)
-        player.points-=400;
+
+
     }
 
      // Se o usuário apertar a tecla E, as recompensas são aleatóriamente embaralhadas nas caixas .
