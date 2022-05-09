@@ -416,7 +416,7 @@ int main(int argc, char* argv[])
     }
 
 // lógica que seta números aleatórios de 0 a 8 para as recompensas (para recompensas não ficarem sempre na mesma posição)
-//esta lógica foi usada a partir de uma resposta do stackoverflow https://stackoverflow.com/questions/36922371/generate-different-random-numbers
+//esta lógica foi usada a partir de uma resposta do stackoverflow FONTE https://stackoverflow.com/questions/36922371/generate-different-random-numbers
     std::vector<int> numbers;
 
     for(int i=0; i<9; i++)
@@ -969,7 +969,7 @@ int main(int argc, char* argv[])
             glm::vec4 p3 = glm::vec4(Rewards[selects[aux]].posx,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz+1,1.0f);
             glm::vec4 p4 = glm::vec4(Rewards[selects[aux]].posx-1,Rewards[selects[aux]].posy+0.5,Rewards[selects[aux]].posz-0.5,1.0f);
             glm::vec4 bezier_pos=bezier_position(p1,p2,p3,p4,t);
-            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(0.8,0.8,0.4);
+            model = Matrix_Translate(bezier_pos.x, bezier_pos.y,bezier_pos.z)*Matrix_Scale(0.8,0.8,0.8);
             glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
             glUniform1i(object_id_uniform, ORANGE);
 
@@ -1828,7 +1828,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
     {
         // lógica que seta as recompensas em caixas aleatórias novamente
-        //esta lógica foi usada a partir de uma resposta do stackoverflow https://stackoverflow.com/questions/36922371/generate-different-random-numbers
+        //esta lógica foi usada a partir de uma resposta do stackoverflow FONTE https://stackoverflow.com/questions/36922371/generate-different-random-numbers
         std::vector<int> numbers;
         for(int i=0; i<9; i++)
             numbers.push_back(i);
@@ -1877,7 +1877,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
         // se nenhuma caixa foi selecionada ainda embaralha as recompensas
         if(count_s==0){
-        //esta lógica foi usada a partir de uma resposta do stackoverflow https://stackoverflow.com/questions/36922371/generate-different-random-numbers
+        //esta lógica foi usada a partir de uma resposta do stackoverflow FONTE https://stackoverflow.com/questions/36922371/generate-different-random-numbers
             std::vector<int> numbers;
             for(int i=0; i<9; i++)
                 numbers.push_back(i);
